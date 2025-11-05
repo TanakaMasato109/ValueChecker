@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>フリマ相場チェッカー</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f0f2f5; /* 少しグレーの背景 */
+            color: #1c1e21;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden; /* スクロールバーを消す */
+        }
+
+        /* --- 1. カメラとガイド枠 --- */
+        #camera-wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 600px; /* PCでの最大幅 */
+            background: #000;
+            margin-top: 20px;
+            border-radius: 12px;
+            overflow: hidden; /* 角を丸くする */
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        video {
+            width: 100%;
+            display: block; /* 余白を消す */
+        }
+
+        /* 撮影ガイドの枠線 */
+        #guide-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 80%; /* 枠の横幅 */
+            height: 30%; /* 枠の縦幅 (本のタイトルに合わせる) */
+            transform: translate(-50%, -50%); /* ど真ん中に配置 */
+            border: 3px dashed rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+
+        #guide-text {
+            position: absolute;
+            top: calc(50% + 15% + 10px); /* ガイド枠のすぐ下 */
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.9em;
+            text-shadow: 1px 1px 2px black;
+        }
+
+        /* --- 2. ボタン --- */
+        #checkButton {
+            background-color: #1877f2; /* メインカラー */
+            color: white;
+            font-size: 1.2em;
+            font-weight: bold;
+            border: none;
+            border-radius: 25px; /* 角を丸く */
+            padding: 12px 30px;
+            margin-top: 25px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+        #checkButton:hover {
+            background-color: #166fe5;
+        }
+
+        /* --- 3. 結果とローディング --- */
+        #result-area {
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 10px;
+            width: 80%;
+            max-width: 560px; /* PCでの最大幅 */
+            text-align: center;
+            min-height: 50px; /* 高さを確保 */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        #result-text {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        /* ローディングスピナー (CSSでくるくる回す) */
+        #loading-spinner {
+            display: none; /* JSで表示/非表示を切り替える */
+            border: 6px solid #f3f3f3;
+            border-top: 6px solid #1877f2;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto; /* 中央寄せ */
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <h3>この枠に本のタイトルを合わせてください</h3>
+
+    <div id="camera-wrapper">
+        <video id="video" playsinline autoplay muted></video>
+        <div id="guide-box"></div>
+        </div>
+
+    <button id="checkButton">相場をチェック！</button>
+
+    <div id="result-area">
+        <div id="loading-spinner"></div>
+        <div id="result-text">ここに相場が表示されます</div>
+    </div>
+
+    <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
+
+    <script src="main.js"></script>
+</body>
+</html>
