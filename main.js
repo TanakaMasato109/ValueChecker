@@ -19,7 +19,7 @@ const debugCanvas = document.getElementById('debug-canvas');
 const debugCtx = debugCanvas.getContext('2d');
 
 // ★★★ あなたのGASのURL ★★★
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwtVOBcJJrVzqAVjQi-bcYAmjqtMg1_kSLpN58SLagb7nJCK7_J5Tmy9y1MBiI8JMxo_Q/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbyeAsOQyRY32hjw9nykBoWLsbT6viS_KKPSv449UmCoMzuUm-0yYzXlzfQzyoq6CkWrNQ/exec';
 
 
 // --- 2. UIの状態を管理する関数 (新設) ---
@@ -172,3 +172,4 @@ resetButton.onclick = () => {
 // --- 8. ページ読み込み時に初期化 ---
 startCamera();
 setUIState('camera'); // 最初の状態を'camera'に設定
+
