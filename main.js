@@ -155,3 +155,4 @@ checkButton.onclick = async () => {
 
 // --- 5. ページが読み込まれたらすぐにカメラを起動 ---
 startCamera();
+
