@@ -4,48 +4,18 @@
     <title>フリマ相場チェッカー</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f0f2f5; color: #1c1e21; margin: 0; padding: 0;
-            display: flex; flex-direction: column; align-items: center;
-            height: 100vh; overflow: hidden;
-        }
-        #camera-wrapper {
-            position: relative; width: 100%; max-width: 600px; background: #000;
-            margin-top: 20px; border-radius: 12px; overflow: hidden;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-        }
+        /* (CSSは前回と全く同じです) */
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #f0f2f5; color: #1c1e21; margin: 0; padding: 0; display: flex; flex-direction: column; align-items: center; height: 100vh; overflow: hidden; }
+        #camera-wrapper { position: relative; width: 100%; max-width: 600px; background: #000; margin-top: 20px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
         video { width: 100%; display: block; }
-        #guide-box {
-            position: absolute; top: 50%; left: 50%; width: 80%; height: 30%;
-            transform: translate(-50%, -50%); border: 3px dashed rgba(255, 255, 255, 0.8);
-        }
-        #checkButton {
-            background-color: #1877f2; color: white; font-size: 1.2em; font-weight: bold;
-            border: none; border-radius: 25px; padding: 12px 30px; margin-top: 25px;
-            cursor: pointer; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-        }
-        #result-area {
-            margin-top: 20px; padding: 15px; background: white; border-radius: 10px;
-            width: 80%; max-width: 560px; text-align: center; min-height: 50px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
+        #guide-box { position: absolute; top: 50%; left: 50%; width: 80%; height: 30%; transform: translate(-50%, -50%); border: 3px dashed rgba(255, 255, 255, 0.8); }
+        #checkButton { background-color: #1877f2; color: white; font-size: 1.2em; font-weight: bold; border: none; border-radius: 25px; padding: 12px 30px; margin-top: 25px; cursor: pointer; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15); }
+        #result-area { margin-top: 20px; padding: 15px; background: white; border-radius: 10px; width: 80%; max-width: 560px; text-align: center; min-height: 50px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); }
         #result-text { font-size: 1.3em; font-weight: bold; color: #333; }
-        #loading-spinner {
-            display: none; border: 6px solid #f3f3f3; border-top: 6px solid #1877f2;
-            border-radius: 50%; width: 30px; height: 30px;
-            animation: spin 1s linear infinite; margin: 0 auto;
-        }
+        #loading-spinner { display: none; border: 6px solid #f3f3f3; border-top: 6px solid #1877f2; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 0 auto; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        /* デバッグ表示用のCSS */
-        #debug-area {
-            position: fixed; bottom: 10px; right: 10px;
-            border: 2px solid red; background: white; z-index: 100;
-        }
-        #debug-area h4 {
-            margin: 0; padding: 2px; background: red; color: white; font-size: 12px;
-        }
+        #debug-area { position: fixed; bottom: 10px; right: 10px; border: 2px solid red; background: white; z-index: 100; }
+        #debug-area h4 { margin: 0; padding: 2px; background: red; color: white; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -71,6 +41,7 @@
     </div>
 
     <script src='https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'></script>
-    <script src="main.js"></script>
-</body>
+    
+    <script src="main.js?v=1.2"></script>
+    </body>
 </html>
