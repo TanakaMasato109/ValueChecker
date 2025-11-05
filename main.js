@@ -1,147 +1,152 @@
 // --- 1. HTML要素をすべて取得 ---
 const video = document.getElementById('video');
-const guideBox = document.getElementById('guide-box');
-const cameraWrapper = document.getElementById('camera-wrapper'); // ★追加
 const checkButton = document.getElementById('checkButton');
-
-const reviewArea = document.getElementById('review-area'); // ★追加
-const reviewTextBox = document.getElementById('review-text-box'); // ★追加
-const searchButton = document.getElementById('search-button'); // ★追加
-
-const resultArea = document.getElementById('result-area'); // ★追加
 const loadingSpinner = document.getElementById('loading-spinner');
 const resultText = document.getElementById('result-text');
-const resetButton = document.getElementById('reset-button'); // ★追加
+const guideBox = document.getElementById('guide-box'); // ガイド枠の要素
 
+// スナップショット用のcanvas (非表示)
 const canvas = document.getElementById('snapshot');
 const ctx = canvas.getContext('2d');
+
+// デバッグ用のcanvas
 const debugCanvas = document.getElementById('debug-canvas');
 const debugCtx = debugCanvas.getContext('2d');
 
-// ★★★ あなたのGASのURL ★★★
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbxdIe6vX8L1KULLQI_YWxPQejjQvwCDERR4pjMJdB50XEA9VolSzGhOj70m8AoyaToXRw/exec';
+
+// ★★★ あなたのGASのURL (GASを再デプロイしたら更新してください) ★★★
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMzE5LJlVU3BP28AbZ6jZhotYxQk9uNlaqdml3b-AOuCUFlWFn8mQPKyT_oq8q91L9/exec';
 
 
-// --- 2. UIの状態を管理する関数 (新設) ---
-function setUIState(state) {
-    // 状態: 'camera', 'loading', 'review', 'result'
-    cameraWrapper.style.display = (state === 'camera') ? 'block' : 'none';
-    checkButton.style.display = (state === 'camera') ? 'block' : 'none';
-    
-    reviewArea.style.display = (state === 'review') ? 'block' : 'none';
-    
-    resultArea.style.display = (state === 'loading' || state === 'result') ? 'block' : 'none';
-    loadingSpinner.style.display = (state === 'loading') ? 'block' : 'none';
-    
-    resetButton.style.display = (state === 'review' || state === 'result') ? 'block' : 'none';
-}
-
-// --- 3. カメラを起動する処理 (変更なし) ---
+// --- 2. カメラを起動する処理 ---
 async function startCamera() {
+    console.log("カメラ起動を試みます...");
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ 
             video: { facingMode: 'environment' } 
         });
         video.srcObject = stream;
-    } catch (err) { /* (省略) */ }
+        console.log("カメラ起動成功。");
+    } catch (err) {
+        console.error("カメラエラー: ", err);
+        // (省略)
+    }
 }
 
-// --- 4. GASを呼び出す関数 (★修正★) ---
-// 'step' パラメータ ('correct' or 'search') を追加
-async function fetchFromGAS(title, step) {
-    console.log(`[GAS Call] Step: ${step}, Title: ${title}`);
+// --- 3. バックエンド(GAS)を呼び出す関数 ---
+async function fetchPriceAndCorrect(title) {
+    console.log(`[GAS Call] OCR Title: ${title}`);
     try {
-        const response = await fetch(`${GAS_URL}?title=${encodeURIComponent(title)}&step=${step}`);
+        // ★GASのdoGetを呼ぶ（stepパラメータは不要）
+        const response = await fetch(`${GAS_URL}?title=${encodeURIComponent(title)}`);
         if (!response.ok) throw new Error('サーバーエラー');
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         console.log("[GAS Response]", data);
-        return data;
+        // data = {price: 1500, correctedTitle: "Python入門"}
+        return data; 
     } catch (err) {
-        console.error('★fetchFromGASでキャッチしたエラー:', err);
+        console.error('★fetchPriceでキャッチしたエラー:', err);
         return { error: '通信に失敗しました' };
     }
 }
 
-// --- 5. ステップ1：OCR実行＆AI補正 (★checkButtonの処理★) ---
+// --- 4. 「相場チェック」ボタンが押されたときの処理 ---
 checkButton.onclick = async () => {
-    console.log("ステップ1: OCRとAI補正を開始");
-    setUIState('loading'); // UIを「ローディング中」に
-    resultText.innerText = 'AIがタイトルを補正中です...';
+    console.clear(); 
+    console.log("「相場チェック」が押されました。");
+    
+    // UIの変更
+    loadingSpinner.style.display = 'block';
+    resultText.innerText = '';
+    resultText.style.color = '#333'; // 色をリセット
+    checkButton.disabled = true;
+    checkButton.innerText = '解析中...';
 
     try {
-        // (省略: 高精度切り抜き処理)
-        const videoWidth = video.videoWidth; const videoHeight = video.videoHeight;
-        const nativeRatio = videoWidth / videoHeight; const clientWidth = video.clientWidth;
-        const clientHeight = video.clientHeight; const clientRatio = clientWidth / clientHeight;
+        
+        // --- ★ 黒帯補正・高精度切り抜き処理 ★ ---
+        console.log("[Canvas Checkpoint 1] 黒帯補正・高精度切り抜きを開始します...");
+        const videoWidth = video.videoWidth;
+        const videoHeight = video.videoHeight;
+        const nativeRatio = videoWidth / videoHeight;
+        const clientWidth = video.clientWidth;
+        const clientHeight = video.clientHeight;
+        const clientRatio = clientWidth / clientHeight;
         let videoContentX = 0, videoContentY = 0, videoContentWidth = clientWidth, videoContentHeight = clientHeight;
-        if (nativeRatio > clientRatio) { videoContentHeight = clientWidth / nativeRatio; videoContentY = (clientHeight - videoContentHeight) / 2; }
-        else { videoContentWidth = clientHeight * nativeRatio; videoContentX = (clientWidth - videoContentWidth) / 2; }
-        const guideRect = guideBox.getBoundingClientRect(); const videoRect = video.getBoundingClientRect();
+        if (nativeRatio > clientRatio) {
+            videoContentHeight = clientWidth / nativeRatio;
+            videoContentY = (clientHeight - videoContentHeight) / 2;
+        } else {
+            videoContentWidth = clientHeight * nativeRatio;
+            videoContentX = (clientWidth - videoContentWidth) / 2;
+        }
+        const guideRect = guideBox.getBoundingClientRect();
+        const videoRect = video.getBoundingClientRect();
         const guideLeft = (guideRect.left - videoRect.left) - videoContentX;
         const guideTop = (guideRect.top - videoRect.top) - videoContentY;
-        const guideWidth = guideRect.width; const guideHeight = guideRect.height;
-        const scaleX = videoWidth / videoContentWidth; const scaleY = videoHeight / videoContentHeight;
-        const cropX = guideLeft * scaleX; const cropY = guideTop * scaleY;
-        const cropWidth = guideWidth * scaleX; const cropHeight = guideHeight * scaleY;
-        canvas.width = cropWidth; canvas.height = cropHeight;
+        const guideWidth = guideRect.width;
+        const guideHeight = guideRect.height;
+        const scaleX = videoWidth / videoContentWidth;
+        const scaleY = videoHeight / videoContentHeight;
+        const cropX = guideLeft * scaleX;
+        const cropY = guideTop * scaleY;
+        const cropWidth = guideWidth * scaleX;
+        const cropHeight = guideHeight * scaleY;
+        canvas.width = cropWidth;
+        canvas.height = cropHeight;
         ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
+        console.log("[Canvas Checkpoint 2] 切り抜き完了。");
         
-        // (省略: グレースケール化)
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height); const data = imageData.data;
-        for (let i = 0; i < data.length; i += 4) { const avg = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114; data[i] = avg; data[i + 1] = avg; data[i + 2] = avg; }
+        // --- ★ グレースケール化 ★ ---
+        console.log("[Image Preprocessing 1] 画像をグレースケール化します...");
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            const avg = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
+            data[i] = avg; data[i + 1] = avg; data[i + 2] = avg;
+        }
         ctx.putImageData(imageData, 0, 0);
+        console.log("[Image Preprocessing 2] グレースケール化完了。");
         
-        // (省略: デバッグ表示)
-        debugCanvas.width = cropWidth; debugCanvas.height = cropHeight;
+        // --- ★ デバッグ表示 ★ ---
+        debugCanvas.width = cropWidth;
+        debugCanvas.height = cropHeight;
         debugCtx.drawImage(canvas, 0, 0);
-        
-        // (省略: Tesseract OCR)
-        const worker = await Tesseract.createWorker('jpn+eng'); 
-        const ret = await worker.recognize(canvas); 
-        await worker.terminate();
-        const ocrTitle = ret.data.text.replace(/[\s\n]/g, '');
 
-        if (!ocrTitle) {
-            alert('文字が認識できませんでした。もう一度試してください。');
-            setUIState('camera'); // UIをカメラ状態に戻す
+        // --- ★ Tesseract (OCR) ★ ---
+        console.log("[OCR Checkpoint 1] Tesseractワーカーを作成します (jpn+eng)...");
+        const worker = await Tesseract.createWorker('jpn+eng'); 
+        console.log("[OCR Checkpoint 2] ワーカー作成完了。認識を開始します...");
+        const ret = await worker.recognize(canvas); 
+        console.log("[OCR Checkpoint 3] 認識完了。");
+        await worker.terminate();
+        console.log("[OCR Checkpoint 4] ワーカー終了。");
+
+        const title = ret.data.text.replace(/[\s\n]/g, '');
+        if (!title) {
+            console.warn("OCR結果が空でした。");
+            loadingSpinner.style.display = 'none';
+            resultText.innerText = '文字が認識できませんでした。';
+            checkButton.disabled = false;
+            checkButton.innerText = '相場をチェック！';
             return;
         }
 
-        // ★ステップ1のGAS呼び出し (AI補正)
-        const correctData = await fetchFromGAS(ocrTitle, 'correct');
-        if (correctData.error) throw new Error(correctData.error);
+        console.log(`[OCR Checkpoint 5] 認識したタイトル: ${title}`);
         
-        // ★UIを「確認・修正」状態へ
-        reviewTextBox.value = correctData.correctedTitle; // テキストボックスにAI補正結果を入れる
-        setUIState('review');
-
-    } catch (error) {
-        console.error("★ステップ1でエラー:", error);
-        alert(`エラーが発生しました: ${error.message}`);
-        setUIState('camera'); // UIをカメラ状態に戻す
-    }
-};
-
-// --- 6. ステップ2：人間が確認＆相場検索 (★searchButtonの処理★) ---
-searchButton.onclick = async () => {
-    const finalTitle = reviewTextBox.value; // 人間が修正した（かもしれない）テキスト
-    
-    if (!finalTitle) {
-        alert('タイトルが空です。');
-        return;
-    }
-    
-    console.log("ステップ2: 相場検索を開始", finalTitle);
-    setUIState('loading'); // UIを「ローディング中」に
-    resultText.innerText = `「${finalTitle}」の相場を検索中...`;
-
-    try {
-        // ★ステップ2のGAS呼び出し (価格検索)
-        const searchData = await fetchFromGAS(finalTitle, 'search');
-        if (searchData.error) throw new Error(searchData.error);
-
-        const price = searchData.price;
+        // --- ★ バックエンドAPI呼び出し ★ ---
+        resultText.innerText = `「${title}」の相場を検索中... (AIが補正中...)`;
+        // GASを呼び出し、{price, correctedTitle} を受け取る
+        const resultData = await fetchPriceAndCorrect(title);
+        
+        if (resultData.error) throw new Error(resultData.error);
+        
+        // --- ★ UIの変更 ★ ---
+        loadingSpinner.style.display = 'none';
+        const price = resultData.price;
+        const correctedTitle = resultData.correctedTitle; // AIが補正したタイトル
+        
         let priceText = '';
         if (typeof price === 'number') {
             resultText.style.color = '#1877f2';
@@ -151,28 +156,21 @@ searchButton.onclick = async () => {
             priceText = 'データなし';
         }
         
-        resultText.innerHTML = `「${searchData.finalTitle}」の<br>相場: ${priceText}`;
-        setUIState('result'); // UIを「結果表示」状態に
+        // 補正後のタイトルで結果を表示
+        resultText.innerHTML = `「${correctedTitle}」の<br>相場: ${priceText}`;
+        checkButton.disabled = false;
+        checkButton.innerText = '相場をチェック！';
 
     } catch (error) {
-        console.error("★ステップ2でエラー:", error);
-        alert(`エラーが発生しました: ${error.message}`);
-        setUIState('review'); // UIをレビュー状態に戻す
+        // もしOCRやAPIのどこかでエラーが起きたら、ここでキャッチ
+        console.error("★onclick処理全体でエラーが発生しました:", error);
+        loadingSpinner.style.display = 'none';
+        resultText.style.color = '#e0245e';
+        resultText.innerText = '解析中にエラーが発生しました。';
+        checkButton.disabled = false;
+        checkButton.innerText = '相場をチェック！';
     }
 };
 
-// --- 7. やり直し処理 (★resetButtonの処理★) ---
-resetButton.onclick = () => {
-    setUIState('camera'); // UIを最初のカメラ状態に戻す
-    resultText.innerHTML = 'ここに相場が表示されます'; // 結果をリセット
-    resultText.style.color = '#333';
-};
-
-
-// --- 8. ページ読み込み時に初期化 ---
+// --- 5. ページが読み込まれたらすぐにカメラを起動 ---
 startCamera();
-setUIState('camera'); // 最初の状態を'camera'に設定
-
-
-
-
