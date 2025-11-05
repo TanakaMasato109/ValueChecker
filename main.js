@@ -1,12 +1,36 @@
-// main.js (ステップ1のファイルに追記・修正)
+// --- 1. HTML要素を最初にすべて取得 ---
+const video = document.getElementById('video');
+const checkButton = document.getElementById('checkButton');
+const loadingSpinner = document.getElementById('loading-spinner');
+const resultText = document.getElementById('result-text');
 
-// ★★★ ステップ3で取得したGASのURLに書き換える ★★★
+// ★★★ あなたのGASのURL ★★★
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyPp-S95CAMRvq0GPs7ykdaAkcvUcXsTamG-3AxJGXK9IqFKcMi9re5ruDckfnM6DLstw/exec';
 
-// バックエンド(GAS)を呼び出す関数
+
+// --- 2. カメラを起動する処理 (★これが抜けていました★) ---
+async function startCamera() {
+    try {
+        // 背面カメラを優先して起動を試みる
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: 'environment' } 
+        });
+        video.srcObject = stream;
+    } catch (err) {
+        console.error("カメラエラー: ", err);
+        // エラーメッセージを分かりやすく表示
+        alert("カメラの起動に失敗しました。ブラウザの許可設定を確認してください。");
+        resultText.style.color = '#e0245e'; // 赤文字
+        resultText.innerText = "カメラの許可が必要です。設定を確認してリロードしてください。";
+        checkButton.disabled = true; // カメラが使えないのでボタンも無効化
+        checkButton.innerText = 'カメラがありません';
+    }
+}
+
+
+// --- 3. バックエンド(GAS)を呼び出す関数 (変更なし) ---
 async function fetchPrice(title) {
     try {
-        // GASに「title」をパラメータとして渡して呼び出す
         const response = await fetch(`${GAS_URL}?title=${encodeURIComponent(title)}`);
         if (!response.ok) {
             throw new Error('サーバーエラーが発生しました');
@@ -19,7 +43,7 @@ async function fetchPrice(title) {
         if (data.price === 'データなし') {
             return '相場データが見つかりません';
         }
-        return `${data.price} 円`; // GASが計算した相場
+        return `${data.price} 円`;
 
     } catch (err) {
         console.error('APIエラー:', err);
@@ -27,60 +51,45 @@ async function fetchPrice(title) {
     }
 }
 
-// 2. 「相場チェック」ボタンが押されたときの処理 (★修正後★)
-// main.js の checkButton.onclick の部分を差し替え
-
-// HTML要素の取得を最初に追加
-const loadingSpinner = document.getElementById('loading-spinner');
-const resultText = document.getElementById('result-text');
-
-// 2. 「相場チェック」ボタンが押されたときの処理
+// --- 4. 「相場チェック」ボタンが押されたときの処理 (変更なし) ---
 checkButton.onclick = async () => {
-    // --- UIの変更（ここから） ---
-    loadingSpinner.style.display = 'block'; // スピナーを表示
-    resultText.innerText = ''; // 前回の結果を消す
-    checkButton.disabled = true; // ボタンを一時的に無効化
+    // UIの変更
+    loadingSpinner.style.display = 'block';
+    resultText.innerText = '';
+    checkButton.disabled = true;
     checkButton.innerText = '解析中...';
-    // --- UIの変更（ここまで） ---
 
-    // 3. Tesseract.jsでOCR
+    // Tesseract.jsでOCR
     const worker = await Tesseract.createWorker('jpn');
-
-    // ★ヒント: ガイド枠の部分だけを切り取ってOCRすると精度が上がるかも？
-    // （今は画面全体をOCRしています）
-    const ret = await worker.recognize(video);
+    const ret = await worker.recognize(video); // これで 'video' 要素が使える
     const title = ret.data.text.replace(/[\s\n]/g, '');
     await worker.terminate();
 
     if (!title) {
-        // --- UIの変更（ここから） ---
-        loadingSpinner.style.display = 'none'; // スピナーを非表示
+        // UIの変更
+        loadingSpinner.style.display = 'none';
         resultText.innerText = '文字が認識できませんでした。';
-        checkButton.disabled = false; // ボタンを有効に戻す
+        checkButton.disabled = false;
         checkButton.innerText = '相場をチェック！';
-        // --- UIの変更（ここまで） ---
         return;
     }
 
-    // 4. バックエンドAPIを呼び出す
+    // バックエンドAPIを呼び出す
     resultText.innerText = `「${title}」の相場を検索中...`;
-
-    const priceText = await fetchPrice(title); // この関数は変更なし
-
-    // --- UIの変更（ここから） ---
-    loadingSpinner.style.display = 'none'; // スピナーを非表示
-
-    // 相場の結果に応じて色を変える
+    const priceText = await fetchPrice(title);
+    
+    // UIの変更
+    loadingSpinner.style.display = 'none';
     if (priceText.includes('円')) {
-        resultText.style.color = '#1877f2'; // 成功時は青文字
+        resultText.style.color = '#1877f2';
     } else {
-        resultText.style.color = '#e0245e'; // 失敗時は赤文字
+        resultText.style.color = '#e0245e';
     }
     resultText.innerText = `相場: 約 ${priceText}`;
-
-    checkButton.disabled = false; // ボタンを有効に戻す
+    checkButton.disabled = false;
     checkButton.innerText = '相場をチェック！';
-    // --- UIの変更（ここまで） ---
 };
 
-// fetchPrice関数やカメラ起動の部分は変更不要です
+
+// --- 5. ページが読み込まれたらすぐにカメラを起動 ---
+startCamera();
