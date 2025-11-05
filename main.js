@@ -3,7 +3,7 @@ const video = document.getElementById('video');
 const checkButton = document.getElementById('checkButton');
 const loadingSpinner = document.getElementById('loading-spinner');
 const resultText = document.getElementById('result-text');
-const guideBox = document.getElementById('guide-box'); // ★ガイド枠の要素も取得
+const guideBox = document.getElementById('guide-box'); // ガイド枠の要素
 
 // スナップショット用のcanvas (非表示)
 const canvas = document.getElementById('snapshot');
@@ -37,7 +37,7 @@ async function fetchPrice(title) {
         if (!response.ok) throw new Error('サーバーエラー');
         const data = await response.json();
         if (data.error) throw new Error(data.error);
-        if (data.price === 'データなし') return '相場データが見つかりません';
+        if (data.price === 'DATA_NOT_FOUND') return '相場データが見つかりません'; // ※GASのロジックに合わせる
         return `${data.price} 円`;
     } catch (err) {
         console.error('★fetchPriceでキャッチしたエラー:', err);
@@ -58,40 +58,61 @@ checkButton.onclick = async () => {
 
     try {
         
-        // --- ★★★ ここからが「高精度切り抜き処理」です ★★★ ---
-        console.log("[Canvas Checkpoint 1] ガイド枠の「高精度」切り抜きを開始します...");
+        // --- ★★★ ここからが「黒帯補正・高精度切り抜き処理」です ★★★ ---
+        console.log("[Canvas Checkpoint 1] 黒帯補正・高精度切り抜きを開始します...");
 
-        // 1. ビデオの「表示サイズ」と「ネイティブ解像度」を両方取得
-        const videoWidth = video.videoWidth;   // 例: 1280 (ネイティブ解像度)
+        // 1. ビデオの「ネイティブ解像度」を取得
+        const videoWidth = video.videoWidth;   // 例: 1280 (ネイティブ)
         const videoHeight = video.videoHeight;  // 例: 720
-        const clientWidth = video.clientWidth; // 例: 390 (スマホの画面幅での表示サイズ)
-        const clientHeight = video.clientHeight; // 例: 219 (↑から計算された表示上の高さ)
+        const nativeRatio = videoWidth / videoHeight; // 例: 1.777... (16:9)
 
-        // 2. CSSのガイド枠の「表示上の」実際の位置とサイズを取得
+        // 2. ビデオの「表示サイズ」を取得
+        const clientWidth = video.clientWidth; // 例: 390 (スマホでの表示幅)
+        const clientHeight = video.clientHeight; // 例: 219 (スマホでの表示高さ)
+        const clientRatio = clientWidth / clientHeight; // 例: 1.780...
+
+        // 3. 黒帯（レターボックス/ピラーボックス）のサイズを計算
+        let videoContentX = 0; // 映像の「表示上の」開始X座標（黒帯の幅）
+        let videoContentY = 0; // 映像の「表示上の」開始Y座標（黒帯の高さ）
+        let videoContentWidth = clientWidth; // 映像の「表示上の」幅
+        let videoContentHeight = clientHeight; // 映像の「表示上の」高さ
+
+        if (nativeRatio > clientRatio) {
+            // ネイティブが横長 (上下に黒帯 = レターボックス)
+            videoContentHeight = clientWidth / nativeRatio;
+            videoContentY = (clientHeight - videoContentHeight) / 2;
+        } else {
+            // ネイティブが縦長 (左右に黒帯 = ピラーボックス)
+            videoContentWidth = clientHeight * nativeRatio;
+            videoContentX = (clientWidth - videoContentWidth) / 2;
+        }
+        
+        // 4. CSSのガイド枠の「表示上の」実際の位置を取得
         const guideRect = guideBox.getBoundingClientRect();
         const videoRect = video.getBoundingClientRect();
-
-        // 3. ビデオの表示領域(videoRect)基準での、ガイド枠の相対位置を計算
-        const guideLeft = guideRect.left - videoRect.left;
-        const guideTop = guideRect.top - videoRect.top;
+        
+        // 5. ガイド枠の「映像の左上からの相対座標」を計算 (黒帯のサイズを引く)
+        const guideLeft = (guideRect.left - videoRect.left) - videoContentX;
+        const guideTop = (guideRect.top - videoRect.top) - videoContentY;
         const guideWidth = guideRect.width;
         const guideHeight = guideRect.height;
         
-        // 4. 「表示サイズ」から「ネイティブ解像度」への拡大率（スケール）を計算
-        const scaleX = videoWidth / clientWidth;
-        const scaleY = videoHeight / clientHeight;
+        // 6. 「表示サイズ」から「ネイティブ解像度」への拡大率を計算
+        //    (黒帯を除いた「実際の映像表示領域」で計算する)
+        const scaleX = videoWidth / videoContentWidth;
+        const scaleY = videoHeight / videoContentHeight;
 
-        // 5. 表示上の座標(guideLeftなど)を、ネイティブ解像度の座標にスケーリング
+        // 7. 表示上の座標(guideLeftなど)を、ネイティブ解像度の座標にスケーリング
         const cropX = guideLeft * scaleX;
         const cropY = guideTop * scaleY;
         const cropWidth = guideWidth * scaleX;
         const cropHeight = guideHeight * scaleY;
 
-        // 6. canvasのサイズを「切り抜くサイズ」に設定
+        // 8. canvasのサイズを「切り抜くサイズ」に設定
         canvas.width = cropWidth;
         canvas.height = cropHeight;
 
-        // 7. videoの「ネイティブ解像度」から「スケーリングした座標」を切り抜く
+        // 9. videoの「ネイティブ解像度」から「スケーリングした座標」を切り抜く
         ctx.drawImage(
             video,      // ソース
             cropX,      // ソースのX座標 (ネイティブ基準)
@@ -136,6 +157,7 @@ checkButton.onclick = async () => {
 
         const title = ret.data.text.replace(/[\s\n]/g, '');
         if (!title) {
+            console.warn("OCR結果が空でした。");
             // (省略)
             return;
         }
