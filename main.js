@@ -173,3 +173,4 @@ resetButton.onclick = () => {
 startCamera();
 setUIState('camera'); // 最初の状態を'camera'に設定
 
+
