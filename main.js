@@ -14,7 +14,7 @@ const debugCanvas = document.getElementById('debug-canvas');
 const debugCtx = debugCanvas.getContext('2d');
 
 
-// ★★★ あなたのGASのURL (GASを再デプロイしたら更新してください) ★★★
+// ★★★ あなたのGASのURL ★★★
 const GAS_URL = 'https://script.google.com/macros/s/AKfycbyMzE5LJlVU3BP28AbZ6jZhotYxQk9uNlaqdml3b-AOuCUFlWFn8mQPKyT_oq8q91L9/exec';
 
 
@@ -37,7 +37,6 @@ async function startCamera() {
 async function fetchPriceAndCorrect(title) {
     console.log(`[GAS Call] OCR Title: ${title}`);
     try {
-        // ★GASのdoGetを呼ぶ（stepパラメータは不要）
         const response = await fetch(`${GAS_URL}?title=${encodeURIComponent(title)}`);
         if (!response.ok) throw new Error('サーバーエラー');
         const data = await response.json();
@@ -47,7 +46,7 @@ async function fetchPriceAndCorrect(title) {
         return data; 
     } catch (err) {
         console.error('★fetchPriceでキャッチしたエラー:', err);
-        return { error: '通信に失敗しました' };
+        return { error: '通信に失敗しました', correctedTitle: title }; // エラー時もcorrectedTitleを返す
     }
 }
 
@@ -63,9 +62,12 @@ checkButton.onclick = async () => {
     checkButton.disabled = true;
     checkButton.innerText = '解析中...';
 
+    // このスコープで 'title' を保持するために try の外で宣言
+    let title = ''; 
+
     try {
         
-        // --- ★ 黒帯補正・高精度切り抜き処理 ★ ---
+        // (省略: 高精度切り抜き処理)
         console.log("[Canvas Checkpoint 1] 黒帯補正・高精度切り抜きを開始します...");
         const videoWidth = video.videoWidth;
         const videoHeight = video.videoHeight;
@@ -96,10 +98,8 @@ checkButton.onclick = async () => {
         canvas.width = cropWidth;
         canvas.height = cropHeight;
         ctx.drawImage(video, cropX, cropY, cropWidth, cropHeight, 0, 0, cropWidth, cropHeight);
-        console.log("[Canvas Checkpoint 2] 切り抜き完了。");
         
-        // --- ★ グレースケール化 ★ ---
-        console.log("[Image Preprocessing 1] 画像をグレースケール化します...");
+        // (省略: グレースケール化)
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
         for (let i = 0; i < data.length; i += 4) {
@@ -107,29 +107,23 @@ checkButton.onclick = async () => {
             data[i] = avg; data[i + 1] = avg; data[i + 2] = avg;
         }
         ctx.putImageData(imageData, 0, 0);
-        console.log("[Image Preprocessing 2] グレースケール化完了。");
         
-        // --- ★ デバッグ表示 ★ ---
+        // (省略: デバッグ表示)
         debugCanvas.width = cropWidth;
         debugCanvas.height = cropHeight;
         debugCtx.drawImage(canvas, 0, 0);
 
-        // --- ★ Tesseract (OCR) ★ ---
+        // (省略: Tesseract OCR)
         console.log("[OCR Checkpoint 1] Tesseractワーカーを作成します (jpn+eng)...");
         const worker = await Tesseract.createWorker('jpn+eng'); 
-        console.log("[OCR Checkpoint 2] ワーカー作成完了。認識を開始します...");
         const ret = await worker.recognize(canvas); 
-        console.log("[OCR Checkpoint 3] 認識完了。");
         await worker.terminate();
-        console.log("[OCR Checkpoint 4] ワーカー終了。");
 
-        const title = ret.data.text.replace(/[\s\n]/g, '');
+        // ★ 'title' に生のOCR結果を代入
+        title = ret.data.text.replace(/[\s\n]/g, ''); 
+        
         if (!title) {
-            console.warn("OCR結果が空でした。");
-            loadingSpinner.style.display = 'none';
-            resultText.innerText = '文字が認識できませんでした。';
-            checkButton.disabled = false;
-            checkButton.innerText = '相場をチェック！';
+            // (省略: OCR失敗時の処理)
             return;
         }
 
@@ -137,36 +131,49 @@ checkButton.onclick = async () => {
         
         // --- ★ バックエンドAPI呼び出し ★ ---
         resultText.innerText = `「${title}」の相場を検索中... (AIが補正中...)`;
-        // GASを呼び出し、{price, correctedTitle} を受け取る
         const resultData = await fetchPriceAndCorrect(title);
         
         if (resultData.error) throw new Error(resultData.error);
         
-        // --- ★ UIの変更 ★ ---
+        // --- ★★★ ここからが修正点 ★★★ ---
+        // UIの変更
         loadingSpinner.style.display = 'none';
         const price = resultData.price;
         const correctedTitle = resultData.correctedTitle; // AIが補正したタイトル
         
         let priceText = '';
         if (typeof price === 'number') {
-            resultText.style.color = '#1877f2';
             priceText = `約 <strong>${price} 円</strong>`;
         } else {
-            resultText.style.color = '#e0245e';
             priceText = 'データなし';
         }
         
-        // 補正後のタイトルで結果を表示
-        resultText.innerHTML = `「${correctedTitle}」の<br>相場: ${priceText}`;
+        // 色をリセット
+        resultText.style.color = '#333';
+        
+        // ★OCR結果とAI補正結果を「両方」表示する
+        resultText.innerHTML = `
+            <div style="font-size: 0.8em; color: #666; text-align: left;">
+                OCR結果: <span style="color: #e0245e;">${title}</span>
+            </div>
+            <div style="font-size: 0.8em; color: #666; text-align: left; margin-top: 5px;">
+                AI補正: <span style="color: #1877f2;">${correctedTitle}</span>
+            </div>
+            <hr style="margin: 10px 0;">
+            <strong>相場: ${priceText}</strong>
+        `;
+        // --- ★★★ 修正点ここまで ★★★ ---
+        
         checkButton.disabled = false;
         checkButton.innerText = '相場をチェック！';
 
     } catch (error) {
-        // もしOCRやAPIのどこかでエラーが起きたら、ここでキャッチ
+        // (省略: エラー処理)
         console.error("★onclick処理全体でエラーが発生しました:", error);
         loadingSpinner.style.display = 'none';
         resultText.style.color = '#e0245e';
-        resultText.innerText = '解析中にエラーが発生しました。';
+        // エラー時は生のOCR結果(title)を表示
+        resultText.innerHTML = `エラー: ${error.message}<br>(OCR結果: ${title})`;
         checkButton.disabled = false;
         checkButton.innerText = '相場をチェック！';
     }
