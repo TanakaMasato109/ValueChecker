@@ -10,7 +10,7 @@ const debugCanvas = document.getElementById('debug-canvas');
 const debugCtx = debugCanvas.getContext('2d');
 
 // ★★★ あなたのGASのURL (GASを再デプロイしたら更新してください) ★★★
-const GAS_URL = 'https://script.google.com/macros/s/AKfycbwHuNKuJFZVC5KOIZHF-PKvRg63-QK6_H786JIwrgEHhiHkLDQENc_pi9Psez46wTr4Pw/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycby6RvGE4l-itUEK9wCjTZAI7E6ZWaL3WP8-IH9uNX74Nu8ewd4JfHOxC-xa-EWd5MxOPw/exec';
 
 // --- 2. カメラを起動する処理 (変更なし) ---
 async function startCamera() {
@@ -155,5 +155,6 @@ checkButton.onclick = async () => {
 
 // --- 5. ページが読み込まれたらすぐにカメラを起動 ---
 startCamera();
+
 
 
