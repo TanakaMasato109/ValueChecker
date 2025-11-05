@@ -3,12 +3,13 @@ const video = document.getElementById('video');
 const checkButton = document.getElementById('checkButton');
 const loadingSpinner = document.getElementById('loading-spinner');
 const resultText = document.getElementById('result-text');
+const guideBox = document.getElementById('guide-box'); // ★ガイド枠の要素も取得
 
 // スナップショット用のcanvas (非表示)
 const canvas = document.getElementById('snapshot');
 const ctx = canvas.getContext('2d');
 
-// ★★★ デバッグ用のcanvas ★★★
+// デバッグ用のcanvas
 const debugCanvas = document.getElementById('debug-canvas');
 const debugCtx = debugCanvas.getContext('2d');
 
@@ -57,67 +58,84 @@ checkButton.onclick = async () => {
 
     try {
         
-        // --- ★ ステップA: 「切り抜き処理」 ---
-        const videoWidth = video.videoWidth;
-        const videoHeight = video.videoHeight;
-        const cropWidth = videoWidth * 0.8; 
-        const cropHeight = videoHeight * 0.3;
-        const cropX = (videoWidth - cropWidth) / 2;
-        const cropY = (videoHeight - cropHeight) / 2;
+        // --- ★★★ ここからが「高精度切り抜き処理」です ★★★ ---
+        console.log("[Canvas Checkpoint 1] ガイド枠の「高精度」切り抜きを開始します...");
+
+        // 1. ビデオの「表示サイズ」と「ネイティブ解像度」を両方取得
+        const videoWidth = video.videoWidth;   // 例: 1280 (ネイティブ解像度)
+        const videoHeight = video.videoHeight;  // 例: 720
+        const clientWidth = video.clientWidth; // 例: 390 (スマホの画面幅での表示サイズ)
+        const clientHeight = video.clientHeight; // 例: 219 (↑から計算された表示上の高さ)
+
+        // 2. CSSのガイド枠の「表示上の」実際の位置とサイズを取得
+        const guideRect = guideBox.getBoundingClientRect();
+        const videoRect = video.getBoundingClientRect();
+
+        // 3. ビデオの表示領域(videoRect)基準での、ガイド枠の相対位置を計算
+        const guideLeft = guideRect.left - videoRect.left;
+        const guideTop = guideRect.top - videoRect.top;
+        const guideWidth = guideRect.width;
+        const guideHeight = guideRect.height;
         
+        // 4. 「表示サイズ」から「ネイティブ解像度」への拡大率（スケール）を計算
+        const scaleX = videoWidth / clientWidth;
+        const scaleY = videoHeight / clientHeight;
+
+        // 5. 表示上の座標(guideLeftなど)を、ネイティブ解像度の座標にスケーリング
+        const cropX = guideLeft * scaleX;
+        const cropY = guideTop * scaleY;
+        const cropWidth = guideWidth * scaleX;
+        const cropHeight = guideHeight * scaleY;
+
+        // 6. canvasのサイズを「切り抜くサイズ」に設定
         canvas.width = cropWidth;
         canvas.height = cropHeight;
-        
+
+        // 7. videoの「ネイティブ解像度」から「スケーリングした座標」を切り抜く
         ctx.drawImage(
-            video, cropX, cropY, cropWidth, cropHeight,
-            0, 0, cropWidth, cropHeight
+            video,      // ソース
+            cropX,      // ソースのX座標 (ネイティブ基準)
+            cropY,      // ソースのY座標 (ネイティブ基準)
+            cropWidth,  // ソースの幅 (ネイティブ基準)
+            cropHeight, // ソースの高さ (ネイティブ基準)
+            0,          // 描画先のX座標
+            0,          // 描画先のY座標
+            cropWidth,  // 描画先の幅
+            cropHeight  // 描画先の高さ
         );
         console.log("[Canvas Checkpoint 2] 切り抜き完了。");
-        
-        
-        // --- ★ ステップB: 「グレースケール化」に変更 ---
-        // (二値化よりも文字が消えにくい)
+        // --- ★★★ 高精度切り抜きここまで ★★★ ---
+
+
+        // --- ★ ステップB: 「グレースケール化」 ---
         console.log("[Image Preprocessing 1] 画像をグレースケール化します...");
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
-        
         for (let i = 0; i < data.length; i += 4) {
-            // グレースケール（白黒の濃淡）に変換
-            // (人間の視覚特性を考慮した加重平均)
             const avg = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-            
-            data[i] = avg;     // Red
-            data[i + 1] = avg; // Green
-            data[i + 2] = avg; // Blue
+            data[i] = avg; data[i + 1] = avg; data[i + 2] = avg;
         }
         ctx.putImageData(imageData, 0, 0);
         console.log("[Image Preprocessing 2] グレースケール化完了。");
         
-        // --- ★ ステップC: 「デバッグ表示」を追加 ---
-        // AIが見ている画像を、画面右下のデバッグcanvasにコピーする
+        // --- ★ ステップC: 「デバッグ表示」 ---
         debugCanvas.width = cropWidth;
         debugCanvas.height = cropHeight;
         debugCtx.drawImage(canvas, 0, 0);
 
 
         // --- ★ ステップD: Tesseract (OCR) ---
-        
-        // ★ 変更点: 言語モデルに 'eng' (英語) を追加
         console.log("[OCR Checkpoint 1] Tesseractワーカーを作成します (jpn+eng)...");
         const worker = await Tesseract.createWorker('jpn+eng'); 
         
         console.log("[OCR Checkpoint 2] ワーカー作成完了。認識を開始します...");
-        
-        // グレースケール化された 'canvas' を渡す
         const ret = await worker.recognize(canvas); 
-        
         console.log("[OCR Checkpoint 3] 認識完了。");
         await worker.terminate();
         console.log("[OCR Checkpoint 4] ワーカー終了。");
 
         const title = ret.data.text.replace(/[\s\n]/g, '');
         if (!title) {
-            console.warn("OCR結果が空でした。");
             // (省略)
             return;
         }
@@ -146,4 +164,4 @@ checkButton.onclick = async () => {
 };
 
 // --- 5. ページが読み込まれたらすぐにカメラを起動 ---
-startCamera();
+start
