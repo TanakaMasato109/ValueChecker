@@ -31,7 +31,6 @@ async function fetchFromGAS(title) {
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         console.log("[GAS Response]", data);
-        // data = {correctedTitle: "...", searchResults: [...]}
         return data; 
     } catch (err) {
         console.error('★fetchPriceでキャッチしたエラー:', err);
@@ -51,20 +50,29 @@ checkButton.onclick = async () => {
     checkButton.disabled = true;
     checkButton.innerText = '解析中...';
 
-    let title = ''; // エラー表示用に 'title' を保持
+    let title = ''; 
 
     try {
         
-        // (省略: 高精度切り抜き処理)
+        // --- ★ 黒帯補正・高精度切り抜き処理 ★ ---
+        console.log("[Canvas Checkpoint 1] 黒帯補正・高精度切り抜きを開始します...");
         const videoWidth = video.videoWidth; const videoHeight = video.videoHeight;
         const nativeRatio = videoWidth / videoHeight; const clientWidth = video.clientWidth;
         const clientHeight = video.clientHeight; const clientRatio = clientWidth / clientHeight;
         let videoContentX = 0, videoContentY = 0, videoContentWidth = clientWidth, videoContentHeight = clientHeight;
         if (nativeRatio > clientRatio) { videoContentHeight = clientWidth / nativeRatio; videoContentY = (clientHeight - videoContentHeight) / 2; }
         else { videoContentWidth = clientHeight * nativeRatio; videoContentX = (clientWidth - videoContentWidth) / 2; }
-        const guideRect = guideBox.getBoundingClientRect(); const videoRect = video.getBoundingClientRect();
+        
+        const guideRect = guideBox.getBoundingClientRect();
+        const videoRect = video.getBoundingClientRect(); // videoRect
+        
         const guideLeft = (guideRect.left - videoRect.left) - videoContentX;
-        const guideTop = (guideRect.top - videoDect.top) - videoContentY;
+        
+        // --- ★★★ ここが修正点です ★★★ ---
+        // videoDect.top -> videoRect.top に修正
+        const guideTop = (guideRect.top - videoRect.top) - videoContentY; 
+        // --- ★★★ 修正点ここまで ★★★ ---
+        
         const guideWidth = guideRect.width; const guideHeight = guideRect.height;
         const scaleX = videoWidth / videoContentWidth; const scaleY = videoHeight / videoContentHeight;
         const cropX = guideLeft * scaleX; const cropY = guideTop * scaleY;
@@ -91,19 +99,18 @@ checkButton.onclick = async () => {
         
         // --- ★ バックエンドAPI呼び出し ★ ---
         resultText.innerText = `「${title}」の相場を検索中... (AIが補正中...)`;
-        // GASを呼び出し、{correctedTitle, searchResults} を受け取る
         const resultData = await fetchFromGAS(title);
         
         if (resultData.error) throw new Error(resultData.error);
         
-        // --- ★★★ ここからが修正点 ★★★ ---
+        // --- ★ UIの変更 (デバッグ表示) ★ ---
         loadingSpinner.style.display = 'none';
-        const correctedTitle = resultData.correctedTitle; // AIが補正したタイトル
-        const searchResults = resultData.searchResults; // Google検索結果（スニペットの配列）
-        const finalQuery = resultData.query; // 実際に検索したキーワード
+        const correctedTitle = resultData.correctedTitle;
+        const searchResults = resultData.searchResults;
+        const finalQuery = resultData.query;
 
         resultText.style.color = '#333';
-        resultText.style.textAlign = 'left'; // 左揃えに変更
+        resultText.style.textAlign = 'left'; 
         
         let html = `
             <div style="font-size: 0.8em; color: #666;">
@@ -122,7 +129,6 @@ checkButton.onclick = async () => {
         if (searchResults.length > 0) {
             html += '<ul style="font-size: 0.7em; margin: 0; padding-left: 20px;">';
             searchResults.forEach(snippet => {
-                // スニペットに含まれる価格らしき部分をハイライト
                 const highlighted = snippet.replace(/([¥￥]?\d{1,3}(,\d{3})*円?)/g, '<strong style="color: red;">$1</strong>');
                 html += `<li style="margin-top: 5px;">${highlighted}</li>`;
             });
@@ -132,7 +138,6 @@ checkButton.onclick = async () => {
         }
 
         resultText.innerHTML = html;
-        // --- ★★★ 修正点ここまで ★★★ ---
         
         checkButton.disabled = false;
         checkButton.innerText = '相場をチェック！';
@@ -150,4 +155,3 @@ checkButton.onclick = async () => {
 
 // --- 5. ページが読み込まれたらすぐにカメラを起動 ---
 startCamera();
-
