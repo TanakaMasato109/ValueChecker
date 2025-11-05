@@ -24,11 +24,7 @@ async function startCamera() {
         console.log("カメラ起動成功。");
     } catch (err) {
         console.error("カメラエラー: ", err);
-        alert("カメラの起動に失敗しました。ブラウザの許可設定を確認してください。");
-        resultText.style.color = '#e0245e';
-        resultText.innerText = "カメラの許可が必要です。設定を確認してリロードしてください。";
-        checkButton.disabled = true;
-        checkButton.innerText = 'カメラがありません';
+        // (省略)
     }
 }
 
@@ -37,20 +33,7 @@ async function fetchPrice(title) {
     console.log(`[API Checkpoint A] GAS呼び出し開始。タイトル: ${title}`);
     try {
         const response = await fetch(`${GAS_URL}?title=${encodeURIComponent(title)}`);
-        console.log("[API Checkpoint B] GASから応答あり:", response.status);
-        
-        if (!response.ok) {
-            throw new Error('サーバーエラーが発生しました');
-        }
-        const data = await response.json();
-        console.log("[API Checkpoint C] GASのデータをJSONに変換完了:", data);
-
-        if (data.error) {
-            throw new Error(data.error);
-        }
-        if (data.price === 'データなし') {
-            return '相場データが見つかりません';
-        }
+        // (省略)
         return `${data.price} 円`;
 
     } catch (err) {
@@ -73,45 +56,58 @@ checkButton.onclick = async () => {
     // Tesseract.jsでOCR
     try {
         
-        // --- ★★★ ここが「切り抜き処理」です ★★★ ---
+        // --- ★ ステップA: 「切り抜き処理」 ---
         console.log("[Canvas Checkpoint 1] ガイド枠の切り抜きスナップショットを作成します...");
-        
         const videoWidth = video.videoWidth;
         const videoHeight = video.videoHeight;
-
-        // 1. CSSのガイド枠（幅80%, 高さ30%）のサイズを計算
         const cropWidth = videoWidth * 0.8; 
         const cropHeight = videoHeight * 0.3;
-
-        // 2. ガイド枠の開始座標（左上）を計算 (中央配置のため)
-        const cropX = (videoWidth - cropWidth) / 2; // (100% - 80%) / 2 = 10%
-        const cropY = (videoHeight - cropHeight) / 2; // (100% - 30%) / 2 = 35%
-
-        // 3. canvasのサイズを「切り抜くサイズ」に設定
+        const cropX = (videoWidth - cropWidth) / 2;
+        const cropY = (videoHeight - cropHeight) / 2;
+        
         canvas.width = cropWidth;
         canvas.height = cropHeight;
         
-        // 4. videoの「指定範囲」をcanvasの「全体」に描き写す
         ctx.drawImage(
-            video,      // ソース
-            cropX,      // ソースのX座標
-            cropY,      // ソースのY座標
-            cropWidth,  // ソースの幅
-            cropHeight, // ソースの高さ
-            0,          // 描画先のX座標
-            0,          // 描画先のY座標
-            cropWidth,  // 描画先の幅
-            cropHeight  // 描画先の高さ
+            video, cropX, cropY, cropWidth, cropHeight,
+            0, 0, cropWidth, cropHeight
         );
         console.log("[Canvas Checkpoint 2] 切り抜き完了。");
-        // --- ★★★ 切り抜き処理ここまで ★★★ ---
+        
+        
+        // --- ★ ステップB: 「二値化処理」を追加 ---
+        console.log("[Image Preprocessing 1] 画像を二値化します...");
+        
+        // 1. canvasから切り抜いた画像データを取得
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data; // ピクセルデータの配列 (R, G, B, A, R, G, B, A, ...)
+        
+        // 2. ピクセルを1つずつ処理 (4つ飛ばし)
+        for (let i = 0; i < data.length; i += 4) {
+            // グレースケール（白黒の濃淡）に変換 (R,G,Bの平均)
+            const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+            
+            // 閾値（しきい_ち）を設定 (128を基準)
+            // 128より暗ければ黒(0)、明るければ白(255)にする
+            const color = (avg > 128) ? 255 : 0; 
+            
+            data[i] = color;     // Red
+            data[i + 1] = color; // Green
+            data[i + 2] = color; // Blue
+            // data[i + 3] (Alpha/透明度) はそのまま
+        }
+        
+        // 3. 処理した画像データをcanvasに戻す
+        ctx.putImageData(imageData, 0, 0);
+        console.log("[Image Preprocessing 2] 二値化完了。");
+        // --- ★ 二値化処理ここまで ★ ---
 
 
         console.log("[OCR Checkpoint 1] Tesseractワーカーを作成します...");
         const worker = await Tesseract.createWorker('jpn');
         console.log("[OCR Checkpoint 2] ワーカー作成完了。認識を開始します...");
         
-        // 変更点: 'video' ではなく、切り抜いた 'canvas' を渡す
+        // 二値化された 'canvas' を渡す
         const ret = await worker.recognize(canvas); 
         
         console.log("[OCR Checkpoint 3] 認識完了。");
@@ -120,40 +116,18 @@ checkButton.onclick = async () => {
 
         const title = ret.data.text.replace(/[\s\n]/g, '');
         if (!title) {
-            console.warn("OCR結果が空でした。");
-            loadingSpinner.style.display = 'none';
-            resultText.innerText = '文字が認識できませんでした。';
-            checkButton.disabled = false;
-            checkButton.innerText = '相場をチェック！';
+            // (省略)
             return;
         }
 
         console.log(`[OCR Checkpoint 5] 認識したタイトル: ${title}`);
         
-        // バックエンドAPIを呼び出す
-        resultText.innerText = `「${title}」の相場を検索中...`;
-        const priceText = await fetchPrice(title);
-        console.log(`[API Checkpoint D] 最終結果: ${priceText}`);
-        
-        // UIの変更
-        loadingSpinner.style.display = 'none';
-        if (priceText.includes('円')) {
-            resultText.style.color = '#1877f2';
-        } else {
-            resultText.style.color = '#e0245e';
-        }
-        resultText.innerText = `相場: 約 ${priceText}`;
-        checkButton.disabled = false;
+        // (省略)
         checkButton.innerText = '相場をチェック！';
 
     } catch (error) {
-        // もしOCRやAPIのどこかでエラーが起きたら、ここでキャッチ
+        // (省略)
         console.error("★onclick処理全体でエラーが発生しました:", error);
-        loadingSpinner.style.display = 'none';
-        resultText.style.color = '#e0245e';
-        resultText.innerText = '解析中にエラーが発生しました。';
-        checkButton.disabled = false;
-        checkButton.innerText = '相場をチェック！';
     }
 };
 
