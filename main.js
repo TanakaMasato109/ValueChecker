@@ -60,7 +60,7 @@ checkButton.onclick = async () => {
         // 1. canvasのサイズをvideoの実際のサイズに合わせる
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        
+
         // 2. videoの現在のフレームをcanvasに描画する
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         console.log("[Canvas Checkpoint 2] スナップショット作成完了。");
@@ -70,10 +70,10 @@ checkButton.onclick = async () => {
         console.log("[OCR Checkpoint 1] Tesseractワーカーを作成します...");
         const worker = await Tesseract.createWorker('jpn');
         console.log("[OCR Checkpoint 2] ワーカー作成完了。認識を開始します...");
-        
+
         // ★ 変更点: 'video' ではなく 'canvas' を渡す
         const ret = await worker.recognize(canvas); 
-        
+
         console.log("[OCR Checkpoint 3] 認識完了。");
         await worker.terminate();
         // (省略)
@@ -85,7 +85,7 @@ checkButton.onclick = async () => {
         }
 
         console.log(`[OCR Checkpoint 5] 認識したタイトル: ${title}`);
-        
+
         // バックエンドAPIを呼び出す
         resultText.innerText = `「${title}」の相場を検索中...`;
         const priceText = await fetchPrice(title);
