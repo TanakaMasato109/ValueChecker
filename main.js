@@ -10,7 +10,7 @@ const debugCanvas = document.getElementById('debug-canvas');
 const debugCtx = debugCanvas.getContext('2d');
 
 // ★★★ あなたのGASのURL (GASを再デプロイしたら更新してください) ★★★
-const GAS_URL = 'https://script.google.com/macros/s/AKfycby6RvGE4l-itUEK9wCjTZAI7E6ZWaL3WP8-IH9uNX74Nu8ewd4JfHOxC-xa-EWd5MxOPw/exec';
+const GAS_URL = 'https://script.google.com/macros/s/AKfycbxqpfdj5PfRaBQlmSczHBrdBk_98rnL9vDcAg59-FXKsuso5ju4yUhKkJtxq4AzSf1C-Q/exec';
 
 // --- 2. カメラを起動する処理 (変更なし) ---
 async function startCamera() {
@@ -23,7 +23,7 @@ async function startCamera() {
 }
 
 // --- 3. バックエンド(GAS)を呼び出す関数 (変更なし) ---
-async function fetchFromGAS(title) {
+async function fetchPriceAndCorrect(title) {
     console.log(`[GAS Call] OCR Title: ${title}`);
     try {
         const response = await fetch(`${GAS_URL}?title=${encodeURIComponent(title)}`);
@@ -31,6 +31,7 @@ async function fetchFromGAS(title) {
         const data = await response.json();
         if (data.error) throw new Error(data.error);
         console.log("[GAS Response]", data);
+        // data = {price: 1500, correctedTitle: "Python入門"}
         return data; 
     } catch (err) {
         console.error('★fetchPriceでキャッチしたエラー:', err);
@@ -43,36 +44,28 @@ checkButton.onclick = async () => {
     console.clear(); 
     console.log("「相場チェック」が押されました。");
     
-    // (省略: UIの変更)
+    // UIの変更
     loadingSpinner.style.display = 'block';
     resultText.innerText = '';
     resultText.style.color = '#333';
+    resultText.style.textAlign = 'center'; // ★中央揃えに戻す
     checkButton.disabled = true;
     checkButton.innerText = '解析中...';
 
-    let title = ''; 
+    let title = ''; // エラー表示用に 'title' を保持
 
     try {
         
-        // --- ★ 黒帯補正・高精度切り抜き処理 ★ ---
-        console.log("[Canvas Checkpoint 1] 黒帯補正・高精度切り抜きを開始します...");
+        // (省略: 高精度切り抜き処理)
         const videoWidth = video.videoWidth; const videoHeight = video.videoHeight;
         const nativeRatio = videoWidth / videoHeight; const clientWidth = video.clientWidth;
         const clientHeight = video.clientHeight; const clientRatio = clientWidth / clientHeight;
         let videoContentX = 0, videoContentY = 0, videoContentWidth = clientWidth, videoContentHeight = clientHeight;
         if (nativeRatio > clientRatio) { videoContentHeight = clientWidth / nativeRatio; videoContentY = (clientHeight - videoContentHeight) / 2; }
         else { videoContentWidth = clientHeight * nativeRatio; videoContentX = (clientWidth - videoContentWidth) / 2; }
-        
-        const guideRect = guideBox.getBoundingClientRect();
-        const videoRect = video.getBoundingClientRect(); // videoRect
-        
+        const guideRect = guideBox.getBoundingClientRect(); const videoRect = video.getBoundingClientRect();
         const guideLeft = (guideRect.left - videoRect.left) - videoContentX;
-        
-        // --- ★★★ ここが修正点です ★★★ ---
-        // videoDect.top -> videoRect.top に修正
-        const guideTop = (guideRect.top - videoRect.top) - videoContentY; 
-        // --- ★★★ 修正点ここまで ★★★ ---
-        
+        const guideTop = (guideRect.top - videoRect.top) - videoContentY;
         const guideWidth = guideRect.width; const guideHeight = guideRect.height;
         const scaleX = videoWidth / videoContentWidth; const scaleY = videoHeight / videoContentHeight;
         const cropX = guideLeft * scaleX; const cropY = guideTop * scaleY;
@@ -93,51 +86,35 @@ checkButton.onclick = async () => {
         const worker = await Tesseract.createWorker('jpn+eng'); 
         const ret = await worker.recognize(canvas); 
         await worker.terminate();
-        title = ret.data.text.replace(/[\s\n]/g, '');
+
+        title = ret.data.text.replace(/[\s\n]/g, ''); // 生のOCR結果
         if (!title) { /* (省略: OCR失敗時の処理) */ return; }
         console.log(`[OCR Checkpoint 5] 認識したタイトル: ${title}`);
         
         // --- ★ バックエンドAPI呼び出し ★ ---
         resultText.innerText = `「${title}」の相場を検索中... (AIが補正中...)`;
-        const resultData = await fetchFromGAS(title);
+        const resultData = await fetchPriceAndCorrect(title);
         
         if (resultData.error) throw new Error(resultData.error);
         
-        // --- ★ UIの変更 (デバッグ表示) ★ ---
+        // --- ★★★ ここからが修正点 ★★★ ---
+        // 診断表示をやめ、最終結果を表示するUIに戻す
         loadingSpinner.style.display = 'none';
+        const price = resultData.price;
         const correctedTitle = resultData.correctedTitle;
-        const searchResults = resultData.searchResults;
-        const finalQuery = resultData.query;
-
-        resultText.style.color = '#333';
-        resultText.style.textAlign = 'left'; 
         
-        let html = `
-            <div style="font-size: 0.8em; color: #666;">
-                OCR結果: <span style="color: #e0245e;">${title}</span>
-            </div>
-            <div style="font-size: 0.8em; color: #666; margin-top: 5px;">
-                AI補正: <span style="color: #1877f2;">${correctedTitle}</span>
-            </div>
-            <div style="font-size: 0.8em; color: #666; margin-top: 5px;">
-                検索クエリ: <span style="color: #333;">${finalQuery}</span>
-            </div>
-            <hr style="margin: 10px 0;">
-            <strong>Google検索結果 (生データ):</strong>
-        `;
-        
-        if (searchResults.length > 0) {
-            html += '<ul style="font-size: 0.7em; margin: 0; padding-left: 20px;">';
-            searchResults.forEach(snippet => {
-                const highlighted = snippet.replace(/([¥￥]?\d{1,3}(,\d{3})*円?)/g, '<strong style="color: red;">$1</strong>');
-                html += `<li style="margin-top: 5px;">${highlighted}</li>`;
-            });
-            html += '</ul>';
+        let priceText = '';
+        if (typeof price === 'number') {
+            resultText.style.color = '#1877f2';
+            priceText = `約 <strong>${price} 円</strong>`;
         } else {
-            html += '<p style="font-size: 0.9em; color: red; font-weight: bold;">Google検索で 0件 でした。</p>';
+            resultText.style.color = '#e0245e';
+            priceText = 'データなし';
         }
-
-        resultText.innerHTML = html;
+        
+        // 補正後のタイトルで結果を表示
+        resultText.innerHTML = `「${correctedTitle}」の<br>相場: ${priceText}`;
+        // --- ★★★ 修正点ここまで ★★★ ---
         
         checkButton.disabled = false;
         checkButton.innerText = '相場をチェック！';
@@ -155,6 +132,3 @@ checkButton.onclick = async () => {
 
 // --- 5. ページが読み込まれたらすぐにカメラを起動 ---
 startCamera();
-
-
-
